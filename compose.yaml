@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+
+    environment:
+      - INPUT_FILE_PATH=/data/api_requests.log
+
+    volumes:
+      - ./data:/data
+
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - .venv/
+
+        - action: rebuild
+          path: ./pyproject.toml

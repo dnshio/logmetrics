@@ -1,0 +1,17 @@
+[project]
+name = "logmetrics"
+version = "0.1.0"
+description = "Demo app for serving metrics derived from ingested logs"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["fastapi[standard]>=0.112.2", "bytewax>=0.21.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.scripts]
+hello = "logmetrics:hello"
+
+[tool.uv]
+dev-dependencies = ["ruff>=0.6.2", "fastapi-cli>=0.0.5"]
