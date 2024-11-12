@@ -1,4 +1,24 @@
 services:
+  postgres:
+    image: postgres
+    environment:
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: supersecret
+      PGDATA: /data/postgres
+      POSTGRES_DB: logmetrics
+    volumes:
+      - ./schema_files:/docker-entrypoint-initdb.d
+
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   app:
     build: .
     ports:
@@ -6,17 +26,11 @@ services:
 
     environment:
       - INPUT_FILE_PATH=/data/api_requests.log
+      - DB_URL=postgresql://app_user:supersecret@postgres:5432/logmetrics
 
     volumes:
-      - ./data:/data
+      - ./data/api_requests.log:/data/api_requests.log
+      - .:/app
 
-    develop:
-      watch:
-        - action: sync
-          path: .
-          target: /app
-          ignore:
-            - .venv/
-
-        - action: rebuild
-          path: ./pyproject.toml
+    depends_on:
+      - postgres

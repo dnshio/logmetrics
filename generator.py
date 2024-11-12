@@ -34,8 +34,6 @@ with open(log_file, "w") as f:
         request_path = random.choice(request_paths)
         status_code = random.choice(status_codes)
         duration = f"{random.choice(durations):.3f}"
-        f.write(
-            f"{timestamp} {customer_id} {request_path} {status_code} {duration}\n"
-        )
+        f.write(f"{timestamp} {customer_id} {request_path} {status_code} {duration}\n")
 
 print(f"Log file '{log_file}' generated with {num_entries} entries.")
