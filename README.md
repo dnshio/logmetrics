@@ -74,3 +74,19 @@ Use the following curl command to test the API. Change `cust_22` and `from` as y
 ```bash
 curl -v -XGET -H "Content-type: application/json" 'http://0.0.0.0:8000/customers/cust_22/stats?from=2024-10-10'
 ```
+
+## Implementation notes
+[src/logmetrics/ingest.py](src/logmetrics/ingest.py) contains the Bytewax dataflow for processing the
+[log file](data/api_requests.log), calculating stats for daily windows and then inserting those stats
+into the DB. The poorly named [src/logmetrics/dataflow_helpers.py](src/logmetrics/dataflow_helpers.py)
+contains all the functions and other structures used by the dataflow.
+
+### Design notes
+A key decision decision of this project was to calculate the daily stats at ingestion time and store the
+stats in the DB. That decision was taken mostly to keep the scope narrow and to avoid having to calculate
+stats at read time (on api response), which could be expensive. This limits future functionality such as
+stats per hour or other smaller time windows.
+
+If smaller or configurable windows were a requirement then I would consider persisting 5 min or hourly
+windows at ingestion time and use bytewax to process data on the way out depending on the window size
+requested. I am not sure whether that is actually a good idea or not.
