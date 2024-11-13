@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, asdict
+from datetime import datetime, date
 
 
 # slots are enabled by default on Python 3.10+
@@ -52,20 +52,32 @@ def event_from_raw(log_line: str) -> LogEvent:
     )
 
 
+@dataclass
+class Accumulator:
+    date: date | None
+    customer_id: str | None
+    count: int
+    errors: int
+    avg_duration: float
+    median_duration: float
+    p99_duration: float
+    durations: list
+
+
 def acc_builder():
-    return {
-        "date": None,
-        "customer_id": None,
-        "count": 0,
-        "errors": 0,
-        "avg_duration": 0,
-        "median_duration": 0,
-        "p99_duration": 0,
-        "durations": [],
-    }
+    return Accumulator(
+        date=None,
+        customer_id=None,
+        count=0,
+        errors=0,
+        avg_duration=0,
+        median_duration=0,
+        p99_duration=0,
+        durations=[],
+    )
 
 
-def calculate_stats(snapshot: dict, event: LogEvent):
+def calculate_stats(snapshot: Accumulator, event: LogEvent) -> Accumulator:
     """
     Maintains running statistics for event durations in a streaming context.
 
@@ -73,55 +85,44 @@ def calculate_stats(snapshot: dict, event: LogEvent):
     event: New event to incorporate into statistics
 
     Returns:
-        dict: Updated statistics including:
-            - count: Total number of events
-            - avg_duration: Mean duration
-            - median_duration: Median (p50) duration
-            - p99_duration: 99th percentile duration
-            - durations: Sorted list of all durations (for percentile calculations)
+        Accumulator: Updated snapshot:
     """
-    # Set the date and customer_id if this is the first event in the window
-    if snapshot["date"] is None:
-        snapshot["date"] = event.timestamp.date()
-        snapshot["customer_id"] = event.customer_id
+    count = snapshot.count + 1
+    errors = snapshot.errors
 
-    # Update count
-    snapshot["count"] += 1
-
-    # Update the error count
     if event.status_code >= 400:
-        snapshot["errors"] += 1
+        errors += 1
 
     # Insert new duration while maintaining sorted order
-    durations = snapshot["durations"]
-    insert_idx = 0
-    for i, d in enumerate(durations):
-        if event.duration <= d:
-            insert_idx = i
-            break
-        if i == len(durations) - 1:
-            insert_idx = len(durations)
-    durations.insert(insert_idx, event.duration)
 
-    # Update average
-    snapshot["avg_duration"] = (
-        snapshot["avg_duration"] * (snapshot["count"] - 1) + event.duration
-    ) / snapshot["count"]
+    durations = [d for d in snapshot.durations]
+    durations.append(event.duration)
+    durations.sort()
 
-    # Update median (p50)
-    median_idx = (snapshot["count"] - 1) // 2
-    if snapshot["count"] % 2 == 0:
-        snapshot["median_duration"] = (
-            durations[median_idx] + durations[median_idx + 1]
-        ) / 2
+    # Calculate running avg
+    avg = (snapshot.avg_duration * (count - 1) + event.duration) / count
+
+    # Calculate running median (p50)
+    idx = (count - 1) // 2
+    if count % 2 == 0:
+        median = (durations[idx] + durations[idx + 1]) / 2
     else:
-        snapshot["median_duration"] = durations[median_idx]
+        median = durations[idx]
 
-    # Update p99
-    p99_idx = min(int(snapshot["count"] * 0.99), snapshot["count"] - 1)
-    snapshot["p99_duration"] = durations[p99_idx]
+    # Calculate p99
+    p99_idx = min(int(count * 0.99), count - 1)
+    p99 = durations[p99_idx]
 
-    return snapshot
+    return Accumulator(
+        date=event.timestamp.date(),
+        customer_id=event.customer_id,
+        count=count,
+        errors=errors,
+        avg_duration=avg,
+        median_duration=median,
+        p99_duration=p99,
+        durations=durations,
+    )
 
 
 def window_merger(snapshots, new_snapshot):
@@ -144,15 +145,8 @@ def window_to_db_row(item) -> dict:
     Arg: item is a tuple of (key, (window_id, snapshot))
     e.g. (cust_10, (21, {"customer_id": "cust_10"...}))
     """
-
     t, s = item[1]
 
-    return {
-        "customer_id": s["customer_id"],
-        "date": s["date"],
-        "count": s["count"],
-        "errors": s["errors"],
-        "avg_duration": s["avg_duration"],
-        "median_duration": s["median_duration"],
-        "p99_duration": s["p99_duration"],
-    }
+    vals = asdict(s)
+
+    return {k: v for k, v in asdict(s).items() if k != "durations"}
